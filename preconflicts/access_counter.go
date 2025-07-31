@@ -21,6 +21,7 @@ type AccessCounter struct {
 	txMax map[int]int // txIdx -> max count
 
 	accessChannel chan AccessMessage
+	done          chan bool // 채널 처리 완료 신호
 }
 
 func NewAccessCounter() *AccessCounter {
@@ -29,6 +30,7 @@ func NewAccessCounter() *AccessCounter {
 		hashCount:     make(map[common.Hash]*accessInfo),
 		txMax:         make(map[int]int),
 		accessChannel: make(chan AccessMessage, 1024),
+		done:          make(chan bool, 1),
 	}
 }
 
@@ -51,9 +53,8 @@ func (ac *AccessCounter) StartCounter() {
 				// 최대 접근 횟수 업데이트
 				if _, ok := ac.txMax[txIdx]; !ok {
 					ac.txMax[txIdx] = 0
-				} else {
-					ac.txMax[txIdx] = max(ac.txMax[txIdx], len(ac.addressCount[item].accessTxs))
 				}
+				ac.txMax[txIdx] = max(ac.txMax[txIdx], len(ac.addressCount[item].accessTxs))
 			case common.Hash:
 				if _, ok := ac.hashCount[item]; !ok {
 					ac.hashCount[item] = newAccessInfo()
@@ -66,11 +67,12 @@ func (ac *AccessCounter) StartCounter() {
 				// 최대 접근 횟수 업데이트
 				if _, ok := ac.txMax[txIdx]; !ok {
 					ac.txMax[txIdx] = 0
-				} else {
-					ac.txMax[txIdx] = max(ac.txMax[txIdx], len(ac.hashCount[item].accessTxs))
 				}
+				ac.txMax[txIdx] = max(ac.txMax[txIdx], len(ac.hashCount[item].accessTxs))
 			}
 		}
+		// 채널 처리 완료 신호
+		ac.done <- true
 	}()
 }
 
@@ -112,4 +114,6 @@ func (ac *AccessCounter) GetHashAccessTxs(hash common.Hash) []int {
 
 func (ac *AccessCounter) StopCounter() {
 	close(ac.accessChannel)
+	// 채널 처리 완료까지 대기
+	<-ac.done
 }

@@ -918,8 +918,6 @@ func (app *EVMD) FinalizeBlock(req *abci.RequestFinalizeBlock) (res *abci.Respon
 	}
 	fmt.Printf("\n\n")
 
-	// TODO: 결정적 보장하지 못하는 결과 발견, 해결해야 함
-
 	return app.BaseApp.FinalizeBlock(req)
 }
 
