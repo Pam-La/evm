@@ -136,7 +136,7 @@ if [[ $overwrite == "y" || $overwrite == "Y" ]]; then
 	jq '.app_state["bank"]["denom_metadata"]=[{"description":"The native staking token for evmd.","denom_units":[{"denom":"atest","exponent":0,"aliases":["attotest"]},{"denom":"test","exponent":18,"aliases":[]}],"base":"atest","display":"test","name":"Test Token","symbol":"TEST","uri":"","uri_hash":""}]' "$GENESIS" >"$TMP_GENESIS" && mv "$TMP_GENESIS" "$GENESIS"
 
 	# Enable precompiles in EVM params
-	jq '.app_state["evm"]["params"]["active_static_precompiles"]=["0x0000000000000000000000000000000000000100","0x0000000000000000000000000000000000000400","0x0000000000000000000000000000000000000800","0x0000000000000000000000000000000000000801","0x0000000000000000000000000000000000000802","0x0000000000000000000000000000000000000803","0x0000000000000000000000000000000000000804","0x0000000000000000000000000000000000000805", "0x0000000000000000000000000000000000000806", "0x0000000000000000000000000000000000000807"]' "$GENESIS" >"$TMP_GENESIS" && mv "$TMP_GENESIS" "$GENESIS"
+	jq '.app_state["evm"]["params"]["active_static_precompiles"]=["0x0000000000000000000000000000000000000100","0x0000000000000000000000000000000000000400","0x0000000000000000000000000000000000000800","0x0000000000000000000000000000000000000801","0x0000000000000000000000000000000000000802","0x0000000000000000000000000000000000000803","0x0000000000000000000000000000000000000804","0x0000000000000000000000000000000000000805"]' "$GENESIS" >"$TMP_GENESIS" && mv "$TMP_GENESIS" "$GENESIS"
 
 	# Set EVM config
 	jq '.app_state["evm"]["params"]["evm_denom"]="atest"' "$GENESIS" >"$TMP_GENESIS" && mv "$TMP_GENESIS" "$GENESIS"
@@ -146,7 +146,7 @@ if [[ $overwrite == "y" || $overwrite == "Y" ]]; then
 	jq '.app_state.erc20.token_pairs=[{contract_owner:1,erc20_address:"0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",denom:"atest",enabled:true}]' "$GENESIS" >"$TMP_GENESIS" && mv "$TMP_GENESIS" "$GENESIS"
 
 	# Set gas limit in genesis
-	jq '.consensus.params.block.max_gas="10000000"' "$GENESIS" >"$TMP_GENESIS" && mv "$TMP_GENESIS" "$GENESIS"
+	jq '.consensus.params.block.max_gas="10000000000"' "$GENESIS" >"$TMP_GENESIS" && mv "$TMP_GENESIS" "$GENESIS"
 
 	if [[ $1 == "pending" ]]; then
 		if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -220,10 +220,26 @@ if [[ $overwrite == "y" || $overwrite == "Y" ]]; then
 	fi
 fi
 
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' 's/timeout_commit = "5s"/timeout_commit = "1s"/g' "$CONFIG"
+else
+    sed -i 's/timeout_commit = "5s"/timeout_commit = "1s"/g' "$CONFIG"
+fi
+
 # Start the node
-evmd start "$TRACE" \
-	--log_level $LOGLEVEL \
-	--minimum-gas-prices=0.0001atest \
-	--home "$HOMEDIR" \
-	--json-rpc.api eth,txpool,personal,net,debug,web3 \
-	--chain-id "$CHAINID"
+if [[ $BUILD_FOR_DEBUG == true ]]; then
+    echo "Starting evmd with Delve debugger on port 2345..."
+    dlv --listen=:2345 --headless=true --api-version=2 --accept-multiclient exec $(which evmd) -- start "$TRACE" \
+        --log_level $LOGLEVEL \
+        --minimum-gas-prices=0.0001atest \
+        --home "$HOMEDIR" \
+        --json-rpc.api eth,txpool,personal,net,debug,web3 \
+        --chain-id "$CHAINID"
+else
+    evmd start "$TRACE" \
+        --log_level $LOGLEVEL \
+        --minimum-gas-prices=0.0001atest \
+        --home "$HOMEDIR" \
+        --json-rpc.api eth,txpool,personal,net,debug,web3 \
+        --chain-id "$CHAINID"
+fi

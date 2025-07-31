@@ -271,6 +271,10 @@ require (
 replace (
 	// use cosmos fork of keyring
 	github.com/99designs/keyring => github.com/cosmos/keyring v1.2.0
+
+	// for parallel testing
+	github.com/cosmos/cosmos-sdk => github.com/Pam-La/cosmos-sdk v0.53.3 // remote
+	// github.com/cosmos/cosmos-sdk => /Users/pamla/workspace/cosmos-sdk // local
 	// use Cosmos geth fork
 	github.com/ethereum/go-ethereum => github.com/cosmos/go-ethereum v1.15.11-cosmos-0
 	// Security Advisory https://github.com/advisories/GHSA-h395-qcrw-5vmq
