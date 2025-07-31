@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 
 	"github.com/spf13/cast"
 
@@ -30,6 +31,7 @@ import (
 	feemarketkeeper "github.com/cosmos/evm/x/feemarket/keeper"
 	feemarkettypes "github.com/cosmos/evm/x/feemarket/types"
 	ibccallbackskeeper "github.com/cosmos/evm/x/ibc/callbacks/keeper"
+
 	// NOTE: override ICS20 keeper to support IBC transfers of ERC20 tokens
 	evmdconfig "github.com/cosmos/evm/evmd/cmd/evmd/config"
 	"github.com/cosmos/evm/x/ibc/transfer"
@@ -130,6 +132,8 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/staking"
 	stakingkeeper "github.com/cosmos/cosmos-sdk/x/staking/keeper"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
+
+	"github.com/cosmos/evm/preconflicts"
 )
 
 func init() {
@@ -841,6 +845,81 @@ func (app *EVMD) EndBlocker(ctx sdk.Context) (sdk.EndBlock, error) {
 }
 
 func (app *EVMD) FinalizeBlock(req *abci.RequestFinalizeBlock) (res *abci.ResponseFinalizeBlock, err error) {
+	ctx := app.NewContext(false).
+		WithBlockHeight(req.Height).
+		WithBlockTime(req.Time)
+
+	txCount := len(req.Txs)
+
+	analyzer := preconflicts.NewConflictAnalyzer(app.EVMKeeper)
+	accessResults := make([]*preconflicts.AccessResult, txCount)
+
+	analyzer.StartCounter()
+	wg := sync.WaitGroup{}
+	// 트랜잭션 동시 실행으로 read/write 탐지
+	for i, txBytes := range req.Txs {
+		wg.Add(1)
+		go func(i int, txBytes []byte, wg *sync.WaitGroup) {
+			defer wg.Done()
+
+			cosmosTx, err := app.txConfig.TxDecoder()(txBytes)
+			if err != nil {
+				return
+			}
+
+			msgs := cosmosTx.GetMsgs()
+			if len(msgs) != 1 {
+				return
+			}
+
+			ethMsg, ok := msgs[0].(*evmtypes.MsgEthereumTx)
+			if !ok {
+				return
+			}
+
+			ethTx := ethMsg.AsTransaction()
+			sCtx, _ := ctx.CacheContext()
+
+			accessResult, err := analyzer.DetectWithTxRun(sCtx, ethTx, i)
+			if err != nil {
+				return
+			}
+
+			accessResults[i] = accessResult
+		}(i, txBytes, &wg)
+	}
+	wg.Wait()
+	analyzer.StopCounter()
+
+	independentTxs := make([]int, 0)
+	conflictResults := make(map[int][]int)
+	// 트랜잭션 간 충돌 판단
+	for i := 0; i < txCount; i++ {
+		if analyzer.IsConflict(i) {
+			for _, addr := range accessResults[i].AddressList {
+				conflictResults[i] = append(conflictResults[i], analyzer.GetAddressAccessTxs(addr)...)
+			}
+			for _, hash := range accessResults[i].HashList {
+				conflictResults[i] = append(conflictResults[i], analyzer.GetHashAccessTxs(hash)...)
+			}
+		} else {
+			independentTxs = append(independentTxs, i)
+		}
+	}
+
+	// 트랜잭션 그룹화
+	conflictGraph := preconflicts.NewConflictGraph()
+	conflictGraph.BuildFromConflictResult(conflictResults)
+	groupResult := conflictGraph.AssignGroups(independentTxs)
+
+	fmt.Printf("\n\n")
+	for i := 0; i < groupResult.NumGroups; i++ {
+		fmt.Printf("group %d: %v\n", i, groupResult.Groups[i])
+	}
+	fmt.Printf("\n\n")
+
+	// TODO: 결정적 보장하지 못하는 결과 발견, 해결해야 함
+
 	return app.BaseApp.FinalizeBlock(req)
 }
 
