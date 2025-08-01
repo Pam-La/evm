@@ -157,7 +157,16 @@ func (ocg *ConflictGraph) AssignGroups(independentTxs []int) *GroupResult {
 	}
 
 	pq := make(PriorityQueue, 0, len(ocg.Vertices))
-	for _, vertex := range ocg.Vertices {
+
+	// 결정적 순서를 위해 vertex index 순으로 정렬해서 추가
+	vertexIndices := make([]int, 0, len(ocg.Vertices))
+	for txIdx := range ocg.Vertices {
+		vertexIndices = append(vertexIndices, txIdx)
+	}
+	sort.Ints(vertexIndices)
+
+	for _, txIdx := range vertexIndices {
+		vertex := ocg.Vertices[txIdx]
 		vertex.UpdateSaturation() // 초기에는 모두 0
 		heap.Push(&pq, vertex)
 	}

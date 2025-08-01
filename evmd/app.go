@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"sync"
 
 	"github.com/spf13/cast"
@@ -891,25 +892,82 @@ func (app *EVMD) FinalizeBlock(req *abci.RequestFinalizeBlock) (res *abci.Respon
 	wg.Wait()
 	analyzer.StopCounter()
 
-	independentTxs := make([]int, 0)
-	conflictResults := make(map[int][]int)
-	// 트랜잭션 간 충돌 판단
+	// 1단계: 각 트랜잭션의 충돌 여부 확인
+	isConflictingTx := make(map[int]bool)
 	for i := 0; i < txCount; i++ {
-		if analyzer.IsConflict(i) {
+		isConflictingTx[i] = analyzer.IsConflict(i)
+	}
+
+	// 2단계: 모든 충돌하는 트랜잭션들의 집합 구성
+	conflictingTxIndices := make(map[int]bool)
+	for i := 0; i < txCount; i++ {
+		if isConflictingTx[i] {
+			conflictingTxIndices[i] = true
+
+			// 이 트랜잭션과 충돌하는 다른 트랜잭션들도 충돌 집합에 추가
 			for _, addr := range accessResults[i].AddressList {
-				conflictResults[i] = append(conflictResults[i], analyzer.GetAddressAccessTxs(addr)...)
+				for _, txIdx := range analyzer.GetAddressAccessTxs(addr) {
+					if txIdx != i {
+						conflictingTxIndices[txIdx] = true
+					}
+				}
 			}
+
 			for _, hash := range accessResults[i].HashList {
-				conflictResults[i] = append(conflictResults[i], analyzer.GetHashAccessTxs(hash)...)
+				for _, txIdx := range analyzer.GetHashAccessTxs(hash) {
+					if txIdx != i {
+						conflictingTxIndices[txIdx] = true
+					}
+				}
 			}
-		} else {
-			independentTxs = append(independentTxs, i)
 		}
 	}
 
+	// 3단계: 독립 트랜잭션과 충돌 트랜잭션 분리
+	independentTxs := make([]int, 0)
+	finalConflictResults := make(map[int][]int)
+
+	for i := 0; i < txCount; i++ {
+		if !conflictingTxIndices[i] {
+			// 진짜 독립 트랜잭션
+			independentTxs = append(independentTxs, i)
+		} else {
+			// 충돌 트랜잭션인 경우에만 충돌 관계 구성
+			conflictTxsSet := make(map[int]bool)
+
+			for _, addr := range accessResults[i].AddressList {
+				for _, txIdx := range analyzer.GetAddressAccessTxs(addr) {
+					if txIdx != i && conflictingTxIndices[txIdx] {
+						conflictTxsSet[txIdx] = true
+					}
+				}
+			}
+
+			for _, hash := range accessResults[i].HashList {
+				for _, txIdx := range analyzer.GetHashAccessTxs(hash) {
+					if txIdx != i && conflictingTxIndices[txIdx] {
+						conflictTxsSet[txIdx] = true
+					}
+				}
+			}
+
+			if len(conflictTxsSet) > 0 {
+				conflictTxsList := make([]int, 0, len(conflictTxsSet))
+				for txIdx := range conflictTxsSet {
+					conflictTxsList = append(conflictTxsList, txIdx)
+				}
+				sort.Ints(conflictTxsList)
+				finalConflictResults[i] = conflictTxsList
+			}
+		}
+	}
+
+	// 독립 트랜잭션 리스트 정렬 (결정적 순서 보장)
+	sort.Ints(independentTxs)
+
 	// 트랜잭션 그룹화
 	conflictGraph := preconflicts.NewConflictGraph()
-	conflictGraph.BuildFromConflictResult(conflictResults)
+	conflictGraph.BuildFromConflictResult(finalConflictResults)
 	groupResult := conflictGraph.AssignGroups(independentTxs)
 
 	fmt.Printf("\n\n")
@@ -918,7 +976,20 @@ func (app *EVMD) FinalizeBlock(req *abci.RequestFinalizeBlock) (res *abci.Respon
 	}
 	fmt.Printf("\n\n")
 
-	return app.BaseApp.FinalizeBlock(req)
+	if len(req.Txs) <= groupResult.NumGroups {
+		return app.BaseApp.FinalizeBlock(req)
+	}
+
+	// GroupResult.Groups에서 각 그룹 내 트랜잭션들이 정렬되어 있는지 확인
+	// (grouping.go에서 이미 정렬하지만 추가 보장)
+	deterministicGroups := make(map[int][]int)
+	for groupID, txList := range groupResult.Groups {
+		deterministicGroups[groupID] = make([]int, len(txList))
+		copy(deterministicGroups[groupID], txList)
+		sort.Ints(deterministicGroups[groupID]) // 각 그룹 내 트랜잭션들도 정렬
+	}
+
+	return app.BaseApp.FinalizeBlockWithGroupInfo(req, deterministicGroups)
 }
 
 func (app *EVMD) Configurator() module.Configurator {
