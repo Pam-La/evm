@@ -151,8 +151,12 @@ if [[ $overwrite == "y" || $overwrite == "Y" ]]; then
 	sed -i.bak "s/persistent_peers = \"\"/persistent_peers = \"$NODE1_ID@127.0.0.1:$NODE1_P2P_PORT\"/g" "$CONFIG2"
 
 	# 블록 시간 설정
-	sed -i.bak 's/timeout_commit = "5s"/timeout_commit = "1s"/g' "$CONFIG1"
-	sed -i.bak 's/timeout_commit = "5s"/timeout_commit = "1s"/g' "$CONFIG2"
+	sed -i.bak 's/timeout_commit = "5s"/timeout_commit = "500ms"/g' "$CONFIG1"
+	sed -i.bak 's/timeout_commit = "5s"/timeout_commit = "500ms"/g' "$CONFIG2"
+
+	# mempool 설정
+	sed -i.bak 's/size = 5000/size = 10000/g' "$CONFIG1"
+	sed -i.bak 's/size = 5000/size = 10000/g' "$CONFIG2"
 
 	# API 활성화
 	sed -i.bak 's/enable = false/enable = true/g' "$APP_TOML1"

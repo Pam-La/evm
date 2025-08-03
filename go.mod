@@ -274,7 +274,7 @@ replace (
 	github.com/99designs/keyring => github.com/cosmos/keyring v1.2.0
 
 	// for parallel testing
-	github.com/cosmos/cosmos-sdk => github.com/Pam-La/cosmos-sdk v0.53.3-parallel.2
+	github.com/cosmos/cosmos-sdk => github.com/Pam-La/cosmos-sdk v0.53.3-parallel.3
 	// github.com/cosmos/cosmos-sdk => /Users/pamla/workspace/b-harvest/cosmos-sdk // local
 	// use Cosmos geth fork
 	github.com/ethereum/go-ethereum => github.com/cosmos/go-ethereum v1.15.11-cosmos-0

@@ -279,7 +279,7 @@ replace (
 	// Pin this pebble version to avoid breaking compilation of geth
 	github.com/cockroachdb/pebble => github.com/cockroachdb/pebble v0.0.0-20230928194634-aa077af62593
 
-	github.com/cosmos/cosmos-sdk => github.com/Pam-La/cosmos-sdk v0.53.3-parallel.2
+	github.com/cosmos/cosmos-sdk => github.com/Pam-La/cosmos-sdk v0.53.3-parallel.3
 	// github.com/cosmos/cosmos-sdk => /Users/pamla/workspace/b-harvest/cosmos-sdk // local
 
 	github.com/cosmos/evm => ../

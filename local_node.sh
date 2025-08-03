@@ -221,9 +221,11 @@ if [[ $overwrite == "y" || $overwrite == "Y" ]]; then
 fi
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed -i '' 's/timeout_commit = "5s"/timeout_commit = "1s"/g' "$CONFIG"
+    sed -i '' 's/timeout_commit = "5s"/timeout_commit = "500ms"/g' "$CONFIG"
+    sed -i '' 's/size = 5000/size = 10000/g' "$CONFIG"
 else
-    sed -i 's/timeout_commit = "5s"/timeout_commit = "1s"/g' "$CONFIG"
+    sed -i 's/timeout_commit = "5s"/timeout_commit = "500ms"/g' "$CONFIG"
+    sed -i 's/size = 5000/size = 10000/g' "$CONFIG"
 fi
 
 # Start the node
